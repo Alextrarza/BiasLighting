@@ -1,27 +1,37 @@
 import cv2
+import tkinter as tk
 import serial
+import dxcam
 
 def main():
     # open the default camera
     cap = cv2.VideoCapture(0)
+    # create camera object to capture screen
+    #camera = dxcam.create(output_color="BGR")
+    flaga_serial = True
     if not cap.isOpened():
         print("Error opening camera")
         return
+    
     # Open the serial port
     try:
         serial_port = serial.Serial('COM11', baudrate=155200, timeout=1)
     except serial.SerialException as e:
-        print(f"Error opening serial port: {e}")
-        return
+        flaga_serial = False
+    
+    root = tk.Tk()
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    
     while True:
-        ret, frame = cap.read()
+        # Capture frame
+        ret, frame = cap.read() # capture from camera
+        #frame = camera.grab()  # capture full screen screenshot
         if not ret:
             print("Error capturing frame")
-            break
-        
+            break   
         # Convert colorspace from BGR to RGB
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
         frame_width = frame.shape[1]
         frame_height = frame.shape[0]
         # Define regions of interest on the four edges of the screen
@@ -29,6 +39,7 @@ def main():
         roi_right = frame[0:frame_height, frame_width-10:frame_width]
         roi_top = frame[0:10, 0:frame_width]
         roi_bottom = frame[frame_height-10:frame_height, 0:frame_width]
+        # Calculate mean color of edges
         color_left = cv2.mean(roi_left)
         color_right = cv2.mean(roi_right)
         color_top = cv2.mean(roi_top)
@@ -40,11 +51,12 @@ def main():
         print("Bottom edge color:", color_bottom)
         print()
         # send the color data over the serial port
-        try:
-            serial_port.write(f"Left:{color_left}Right:{color_right}Top:{color_top}Bottom:{color_bottom}".encode())
-        except serial.SerialTimeoutException as e:
-            print(f"Error sending data over serial port: {e}")
-            break
+        if flaga_serial == True:
+            try:
+                serial_port.write(color_left, color_right, color_top, color_bottom)
+            except serial.SerialTimeoutException as e:
+                print(f"Error sending data over serial port: {e}")
+                return
         
         # show average color on left edge
         frame[0:frame_height, 0:10,:] = color_left[0:-1]
@@ -62,13 +74,12 @@ def main():
         #cv2.namedWindow("Preview", cv2.WINDOW_NORMAL)
         cv2.imshow("Preview", frame)
 
-        # use the color variables to control the color of an LED strip here
-        # ...
         if cv2.waitKey(30) >= 0:
             break
-    serial_port.close()
+        
     cap.release()
     cv2.destroyAllWindows()
-
+    if flaga_serial == True:
+        serial_port.close()
 if __name__ == "__main__":
     main()
